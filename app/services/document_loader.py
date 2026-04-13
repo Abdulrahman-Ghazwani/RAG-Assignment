@@ -1,20 +1,55 @@
-import fitz  # PyMuPDF
-from typing import List
+import fitz
+from docx import Document
+from pathlib import Path
 
 
 class DocumentLoader:
     @staticmethod
-    def load_pdf(file_path: str) -> str:
-        text_pages: List[str] = []
+    def load_pdf_with_pages(file_path: str):
+        pages = []
 
-        try:
-            with fitz.open(file_path) as pdf:
-                for page in pdf:
-                    page_text = page.get_text()
-                    if page_text and page_text.strip():
-                        text_pages.append(page_text.strip())
+        with fitz.open(file_path) as pdf:
+            for page_num, page in enumerate(pdf):
+                page_text = page.get_text()
 
-        except Exception as e:
-            raise Exception(f"Error reading PDF file: {e}")
+                if page_text and page_text.strip():
+                    pages.append({
+                        "content": page_text.strip(),
+                        "page": page_num + 1
+                    })
 
-        return "\n\n".join(text_pages)
+        return pages
+
+    @staticmethod
+    def load_docx_with_pages(file_path: str):
+        doc = Document(file_path)
+
+        paragraphs = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if text:
+                paragraphs.append(text)
+
+        full_text = "\n".join(paragraphs).strip()
+
+        if not full_text:
+            return []
+
+        return [
+            {
+                "content": full_text,
+                "page": 1
+            }
+        ]
+
+    @staticmethod
+    def load_file(file_path: str):
+        suffix = Path(file_path).suffix.lower()
+
+        if suffix == ".pdf":
+            return DocumentLoader.load_pdf_with_pages(file_path)
+
+        if suffix == ".docx":
+            return DocumentLoader.load_docx_with_pages(file_path)
+
+        raise ValueError(f"Unsupported file type: {suffix}")

@@ -11,3 +11,7 @@ CHAT_MODEL = "gpt-4o-mini"
 CHUNK_SIZE = 700
 CHINK_OVERLAP = 120
 TOP_K = 4
+MIN_RELEVANCE_SCORE = 0.30
+NO_ANSWER_MESSAGE = (
+    "The uploaded documents do not contain enough information to answer this question."
+)

@@ -17,8 +17,15 @@ class FaissVectorStore:
         distances, indices = self.index.search(query, top_k)
 
         results = []
-        for i in indices[0]:
+        for rank, i in enumerate(indices[0]):
             if i < len(self.documents):
-                results.append(self.documents[i])
+                distance = float(distances[0][rank])
+                # With normalized embeddings and L2 distance:
+                # cosine similarity ~= 1 - (squared_l2_distance / 2)
+                score = 1.0 - (distance / 2.0)
+                doc = dict(self.documents[i])
+                doc["distance"] = distance
+                doc["score"] = score
+                results.append(doc)
 
         return results

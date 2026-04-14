@@ -1,62 +1,41 @@
 # Instructions
 
-## 1) Prerequisites
+## Prerequisites
 
-- Python 3.11+ (for local run), or Docker (for container run)
+- Python 3.11+ **or** Docker
 - OpenAI API key
 
-## 2) Environment setup
+## Environment
 
-Create a `.env` file in the project root:
+Create `.env` in the project root:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-...
 ```
 
-## 3) Run locally
-
-Install dependencies:
+## Run locally
 
 ```bash
 pip install -r requirements.txt
-```
-
-Start the app:
-
-```bash
 python -m streamlit run app/ui/streamlit_app.py
 ```
 
-Open:
+Open [http://localhost:8501](http://localhost:8501)
 
-- [http://localhost:8501](http://localhost:8501)
-
-## 4) Run with Docker
-
-Build image:
+## Run with Docker
 
 ```bash
 docker build -t rag-assignment .
-```
-
-Run container:
-
-```bash
 docker run --rm -p 8501:8501 --env-file .env rag-assignment
 ```
 
-Open:
+Open [http://localhost:8501](http://localhost:8501)
 
-- [http://localhost:8501](http://localhost:8501)
+## Usage
 
-## 5) Usage
-
-1. Upload up to 3 files (`.pdf` or `.docx`).
+1. Upload up to 3 PDF or DOCX files.
 2. Click **Process Documents**.
-3. Ask questions in Arabic or English.
-4. Review answer and sources.
+3. Ask in Arabic or English.
+4. Grounded answers show **Sources**.
 
-## 6) Notes
-
-- If a question is not grounded in uploaded docs, the app returns a no-information message.
-- Sources are shown only for grounded answers.
+If the documents do not support an answer, the app returns a fixed no-information message and hides sources.

@@ -1,36 +1,29 @@
 import sys
 from pathlib import Path
 
-_root = Path(__file__).resolve().parents[2]
-if str(_root) not in sys.path:
-    sys.path.insert(0, str(_root))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import os
 import tempfile
-import streamlit as st
 from collections import defaultdict
 
+import streamlit as st
 
-from app.services.document_loader import DocumentLoader
-from app.services.chunker import TextChunker
-from app.services.rag_pipeline import RAGPipeline
 from app.config import NO_ANSWER_MESSAGE
+from app.services.chunker import TextChunker
+from app.services.document_loader import DocumentLoader
+from app.services.rag_pipeline import RAGPipeline
 
-
-st.set_page_config(page_title="Conversational RAG Pipeline", layout="wide")
+st.set_page_config(page_title="Document RAG", layout="wide")
 st.title("Conversational RAG Pipeline")
-st.write("Upload PDF or DOCX files in Arabic or English, then ask questions.")
-
+st.caption("Upload up to 3 PDF or DOCX files — ask in Arabic or English.")
 
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = RAGPipeline()
-
 if "indexed" not in st.session_state:
     st.session_state.indexed = False
-
 if "qa_history" not in st.session_state:
     st.session_state.qa_history = []
-
 
 for item in st.session_state.qa_history:
     with st.chat_message("user"):
@@ -38,42 +31,34 @@ for item in st.session_state.qa_history:
     with st.chat_message("assistant"):
         st.write(item["answer"])
         if item["sources"]:
-            st.markdown("### Sources")
-            for source in item["sources"]:
-                st.write(f"- {source}")
+            st.markdown("**Sources**")
+            for s in item["sources"]:
+                st.write(f"- {s}")
 
-
-uploaded_files = st.file_uploader(
+uploaded = st.file_uploader(
     "Upload up to 3 files",
     type=["pdf", "docx"],
-    accept_multiple_files=True
+    accept_multiple_files=True,
 )
-
-if uploaded_files and len(uploaded_files) > 3:
+if uploaded and len(uploaded) > 3:
     st.error("Maximum allowed uploads is 3 files.")
 
-
-if uploaded_files and st.button("Process Documents"):
-    if len(uploaded_files) > 3:
+if uploaded and st.button("Process Documents"):
+    if len(uploaded) > 3:
         st.stop()
 
     all_chunks = []
-
-    for uploaded_file in uploaded_files:
-        suffix = os.path.splitext(uploaded_file.name)[1]
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(uploaded_file.read())
-            temp_path = tmp.name
-
+    for f in uploaded:
+        ext = os.path.splitext(f.name)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(f.read())
+            path = tmp.name
         try:
-            pages = DocumentLoader.load_file(temp_path)
-            chunks = TextChunker.split_pages(pages, uploaded_file.name)
-            all_chunks.extend(chunks)
-
+            pages = DocumentLoader.load_file(path)
+            all_chunks.extend(TextChunker.split_pages(pages, f.name))
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            if os.path.exists(path):
+                os.remove(path)
 
     if not all_chunks:
         st.error("No text could be extracted from the uploaded files.")
@@ -83,73 +68,50 @@ if uploaded_files and st.button("Process Documents"):
         st.session_state.indexed = True
         st.success("Documents processed successfully.")
 
-
 question = st.chat_input("Ask a question about the uploaded documents...")
 
 if question:
-    history_item = {
-        "question": question,
-        "answer": "",
-        "sources": []
-    }
-
+    history_item = {"question": question, "answer": "", "sources": []}
     with st.chat_message("user"):
         st.write(question)
 
     if not st.session_state.indexed:
         with st.chat_message("assistant"):
-            message = "Please upload and process documents first."
-            st.warning(message)
-            history_item["answer"] = message
+            msg = "Please upload and process documents first."
+            st.warning(msg)
+            history_item["answer"] = msg
     else:
         with st.chat_message("assistant"):
-            response_placeholder = st.empty()
-            full_response = ""
-
-            stream, retrieved_chunks, has_grounding, fallback_message = (
+            placeholder = st.empty()
+            full = ""
+            stream, retrieved, has_grounding, fallback = (
                 st.session_state.pipeline.answer_stream(question)
             )
-
             if not has_grounding:
-                full_response = fallback_message or NO_ANSWER_MESSAGE
-                response_placeholder.markdown(full_response)
+                full = fallback or NO_ANSWER_MESSAGE
+                placeholder.markdown(full)
             else:
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full_response += delta
-                        response_placeholder.markdown(full_response)
-            history_item["answer"] = full_response
+                for ch in stream:
+                    d = ch.choices[0].delta.content
+                    if d:
+                        full += d
+                        placeholder.markdown(full)
+            history_item["answer"] = full
 
-        normalized_response = " ".join(full_response.split()).strip().lower()
-        normalized_no_answer = " ".join(NO_ANSWER_MESSAGE.split()).strip().lower()
-        should_show_sources = (
-            has_grounding
-            and bool(retrieved_chunks)
-            and normalized_response != normalized_no_answer
-        )
-
-        if should_show_sources:
-            sources_map = defaultdict(set)
-
-            for chunk in retrieved_chunks:
-                source = chunk["source"]
-                page = chunk.get("page")
-                if page:
-                    sources_map[source].add(page)
-                else:
-                    sources_map[source].add("?")
-
-            st.markdown("### Sources")
-            for src in sorted(sources_map.keys()):
-                pages = sorted(sources_map[src], key=lambda x: (x == "?", x))
-                pages = pages[:2]
-                pages_str = ", ".join(str(p) for p in pages)
-                source_entry = f"{src} (page {pages_str})"
-                st.write(f"- {source_entry}")
-                history_item["sources"].append(source_entry)
+        norm_a = " ".join(full.split()).strip().lower()
+        norm_n = " ".join(NO_ANSWER_MESSAGE.split()).strip().lower()
+        show_src = has_grounding and retrieved and norm_a != norm_n
+        if show_src:
+            by_file = defaultdict(set)
+            for c in retrieved:
+                by_file[c["source"]].add(c.get("page") or "?")
+            st.markdown("**Sources**")
+            for src in sorted(by_file):
+                pages = sorted(by_file[src], key=lambda x: (x == "?", x))[:2]
+                line = f"{src} (page {', '.join(str(p) for p in pages)})"
+                st.write(f"- {line}")
+                history_item["sources"].append(line)
 
     if not history_item["answer"]:
         history_item["answer"] = NO_ANSWER_MESSAGE
-
     st.session_state.qa_history.append(history_item)

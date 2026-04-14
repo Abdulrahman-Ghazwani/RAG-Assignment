@@ -1,6 +1,7 @@
 from openai import OpenAI
 import tiktoken
-from app.config import OPENAI_API_KEY, EMBEDDING_MODEL
+
+from app.config import EMBEDDING_MODEL, OPENAI_API_KEY
 
 
 class Embedder:
@@ -11,71 +12,41 @@ class Embedder:
         except KeyError:
             self.encoding = tiktoken.get_encoding("cl100k_base")
 
+    def _truncate(self, text: str) -> str:
+        ids = self.encoding.encode(text)
+        if len(ids) > 8000:
+            return self.encoding.decode(ids[:8000])
+        return text
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        cleaned_texts = []
-
-        for text in texts:
-            if text is None:
+        cleaned = []
+        for t in texts:
+            if t is None:
                 continue
-
-            if not isinstance(text, str):
-                text = str(text)
-
-            text = text.strip()
-
-            if text:
-                cleaned_texts.append(text)
-
-        if not cleaned_texts:
+            if not isinstance(t, str):
+                t = str(t)
+            t = t.strip()
+            if t:
+                cleaned.append(self._truncate(t))
+        if not cleaned:
             raise ValueError("No valid texts found for embedding.")
 
-        # Keep each embeddings request below OpenAI request-token limit.
-        max_request_tokens = 200000
-        max_single_text_tokens = 8000
-        batches: list[list[str]] = []
-        current_batch: list[str] = []
-        current_tokens = 0
-
-        for text in cleaned_texts:
-            token_ids = self.encoding.encode(text)
-            if len(token_ids) > max_single_text_tokens:
-                token_ids = token_ids[:max_single_text_tokens]
-                text = self.encoding.decode(token_ids)
-
-            text_tokens = len(token_ids)
-            if current_batch and current_tokens + text_tokens > max_request_tokens:
-                batches.append(current_batch)
-                current_batch = [text]
-                current_tokens = text_tokens
-            else:
-                current_batch.append(text)
-                current_tokens += text_tokens
-
-        if current_batch:
-            batches.append(current_batch)
-
-        all_embeddings = []
-        for batch in batches:
-            response = self.client.embeddings.create(
-                model=EMBEDDING_MODEL,
-                input=batch
-            )
-            all_embeddings.extend(item.embedding for item in response.data)
-
-        return all_embeddings
+        out: list[list[float]] = []
+        batch_size = 16
+        for i in range(0, len(cleaned), batch_size):
+            batch = cleaned[i : i + batch_size]
+            r = self.client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
+            out.extend(item.embedding for item in r.data)
+        return out
 
     def embed_query(self, text: str) -> list[float]:
         if not isinstance(text, str):
             text = str(text)
-
         text = text.strip()
-
         if not text:
             raise ValueError("Query text is empty.")
-
-        response = self.client.embeddings.create(
+        r = self.client.embeddings.create(
             model=EMBEDDING_MODEL,
-            input=[text]
+            input=[self._truncate(text)],
         )
-
-        return response.data[0].embedding
+        return r.data[0].embedding

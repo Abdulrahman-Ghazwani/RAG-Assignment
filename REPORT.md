@@ -1,67 +1,38 @@
-# Conversational RAG Pipeline Report
+# Conversational RAG — Short Report
 
-## Objective
+## Goal
 
-Build an end-to-end conversational Retrieval-Augmented Generation (RAG) system that supports Arabic and English documents, streams responses, and provides source grounding.
+End-to-end RAG: upload documents (PDF/DOCX), ask questions in **Arabic or English**, get **streaming** answers grounded in the files, with optional **source** lines.
 
-## Implemented Solution
+## What we built
 
-The system is implemented with a Streamlit interface and a modular Python backend:
+| Part | Implementation |
+|------|----------------|
+| UI | **Streamlit** — upload (max 3), process button, chat, sources when grounded |
+| Load | **PyMuPDF** (PDF per page), **python-docx** (DOCX as one block) |
+| Chunk | **RecursiveCharacterTextSplitter** — size/overlap from `config.py` |
+| Embed | **OpenAI** `text-embedding-3-small` (batched, long texts truncated) |
+| Retrieve | **FAISS** `IndexFlatL2` in memory, **top‑K** + **min similarity** |
+| Generate | **OpenAI** `gpt-4o-mini`, **temperature 0**, **stream** |
 
-- **UI Layer**: `app/ui/streamlit_app.py`
-  - Upload and process up to 3 files (`PDF`, `DOCX`)
-  - Chat-style interaction
-  - Per-turn answer display with source rendering
-  - Conversation history in the same page
+## Design (minimal)
 
-- **Document Processing**:
-  - `DocumentLoader` extracts page-level text from PDF and DOCX.
-  - `TextChunker` splits text into manageable chunks with overlap.
+- **FAISS**: fast, no external DB for an assignment scope.
+- **Score filter** before LLM: weak matches → fixed “no information” reply (no sources).
+- **Prompt**: answer only from context; same language as question; explicit fallback sentence.
 
-- **Embedding Layer**:
-  - OpenAI embeddings (`text-embedding-3-small`)
-  - Token-aware batching to avoid max-token-per-request failures
+## Quick experiment (example)
 
-- **Vector Search Layer**:
-  - FAISS in-memory vector index
-  - Nearest-neighbor retrieval by semantic similarity
-  - Similarity score filtering (`MIN_RELEVANCE_SCORE`) before answer generation
+1. Upload 1–2 short PDFs you know well.  
+2. Ask a fact that appears verbatim → streamed answer + sources.  
+3. Ask something absent from the files → fallback message, no sources.
 
-- **Generation Layer**:
-  - OpenAI chat model (`gpt-4o-mini`) with streaming output
-  - Strict grounding rules in the prompt
-  - Explicit fallback when context is insufficient
+## Limits
 
-## Key Design Decisions
+- In-memory index only (lost on restart).  
+- DOCX has no real page map (cited as page 1).  
+- Scanned PDFs need OCR outside this project.
 
-1. **FAISS as vector store**
-   - Chosen for speed and simplicity in local assignment scope.
-2. **Page-aware metadata**
-   - Each chunk preserves source filename and page to support citations.
-3. **Grounding controls**
-   - Relevance threshold and fallback response reduce hallucinations.
-4. **Safe source display**
-   - Sources are hidden when response is fallback/no-answer.
+## Run
 
-## Observed Results
-
-- Multi-document processing works for Arabic/English inputs.
-- System streams responses and shows references for grounded answers.
-- Out-of-scope questions return a no-information response.
-- Token limit issues during embedding were mitigated by token-aware batching.
-
-## Limitations
-
-- FAISS index is in-memory only (no persistent vector DB on disk).
-- Relevance threshold is static and may require tuning by dataset.
-- OCR-heavy scanned PDFs may still need dedicated OCR preprocessing.
-
-## Deployment
-
-Dockerized deployment is provided via:
-
-- `Dockerfile`
-- `.dockerignore`
-- `INSTRUCTIONS.md` run steps
-
-The app runs on port `8501` and uses `.env` for API key injection.
+See `INSTRUCTIONS.md` and `Dockerfile` for local and Docker steps.

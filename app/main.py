@@ -1,3 +1,9 @@
-import os
+import subprocess
+import sys
 
-os.system("streamlit run app/ui/streamlit_app.py")
+if __name__ == "__main__":
+    sys.exit(
+        subprocess.call(
+            [sys.executable, "-m", "streamlit", "run", "app/ui/streamlit_app.py"]
+        )
+    )

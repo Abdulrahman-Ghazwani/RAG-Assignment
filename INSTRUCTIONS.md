@@ -16,6 +16,7 @@ OPENAI_API_KEY=sk-...
 ## Run locally
 
 ```bash
+python -m pip install streamlit
 pip install -r requirements.txt
 python -m streamlit run app/ui/streamlit_app.py
 ```

@@ -1,3 +1,5 @@
+import uuid
+
 import chromadb
 
 
@@ -18,7 +20,18 @@ class ChromaVectorStore:
             metadata={"hnsw:space": "l2"},
         )
 
-    def add(self, embeddings: list[list[float]], documents: list[dict]):
+    def _ensure_collection_open(self) -> None:
+        if self._collection is not None:
+            return
+        try:
+            self._collection = self._client.get_collection(self._collection_name)
+        except Exception:
+            self._collection = self._client.create_collection(
+                name=self._collection_name,
+                metadata={"hnsw:space": "l2"},
+            )
+
+    def replace_all(self, embeddings: list[list[float]], documents: list[dict]) -> None:
         if not embeddings:
             raise ValueError("No embeddings to add.")
         if len(embeddings[0]) != self.dim:
@@ -34,7 +47,25 @@ class ChromaVectorStore:
             metadatas=metadatas,
         )
 
+    def append(self, embeddings: list[list[float]], documents: list[dict]) -> None:
+        if not embeddings:
+            raise ValueError("No embeddings to add.")
+        if len(embeddings[0]) != self.dim:
+            raise ValueError("Embedding dimension does not match store dimension.")
+        self._ensure_collection_open()
+        assert self._collection is not None
+        ids = [f"ch_{uuid.uuid4().hex}" for _ in embeddings]
+        metadatas = [{"page": d["page"], "source": d["source"]} for d in documents]
+        self._collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            documents=[d["content"] for d in documents],
+            metadatas=metadatas,
+        )
+
     def search(self, query_embedding: list[float], top_k: int = 4):
+        if self._collection is None:
+            self._ensure_collection_open()
         if self._collection is None:
             return []
         results = self._collection.query(

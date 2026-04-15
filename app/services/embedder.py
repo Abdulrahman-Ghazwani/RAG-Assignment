@@ -1,7 +1,13 @@
-from openai import OpenAI
-import tiktoken
+from concurrent.futures import ThreadPoolExecutor
 
-from app.config import EMBEDDING_MODEL
+import tiktoken
+from openai import OpenAI
+
+from app.config import (
+    EMBEDDING_BATCH_SIZE,
+    EMBEDDING_MAX_PARALLEL,
+    EMBEDDING_MODEL,
+)
 
 
 class Embedder:
@@ -18,8 +24,12 @@ class Embedder:
             return self.encoding.decode(ids[:8000])
         return text
 
+    def _embed_one_batch(self, batch: list[str]) -> list[list[float]]:
+        r = self.client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
+        return [item.embedding for item in r.data]
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        cleaned = []
+        cleaned: list[str] = []
         for t in texts:
             if t is None:
                 continue
@@ -31,12 +41,20 @@ class Embedder:
         if not cleaned:
             raise ValueError("No valid texts found for embedding.")
 
+        bs = max(1, EMBEDDING_BATCH_SIZE)
+        batches: list[list[str]] = [cleaned[i : i + bs] for i in range(0, len(cleaned), bs)]
+
+        if len(batches) == 1:
+            return self._embed_one_batch(batches[0])
+
+        workers = max(1, min(EMBEDDING_MAX_PARALLEL, len(batches)))
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            parts = list(pool.map(self._embed_one_batch, batches))
+
         out: list[list[float]] = []
-        batch_size = 16
-        for i in range(0, len(cleaned), batch_size):
-            batch = cleaned[i : i + batch_size]
-            r = self.client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
-            out.extend(item.embedding for item in r.data)
+        for p in parts:
+            out.extend(p)
         return out
 
     def embed_query(self, text: str) -> list[float]:

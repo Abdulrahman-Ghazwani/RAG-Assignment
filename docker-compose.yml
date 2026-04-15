@@ -3,8 +3,9 @@ services:
     image: chromadb/chroma:latest
     ports:
       - "8000:8000"
+    # Official image persists under /data (not /chroma/chroma)
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
@@ -12,13 +13,25 @@ services:
   app:
     build: .
     ports:
-      - "8501:8501"
+      - "8080:8080"
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       CHROMA_HOST: chromadb
       CHROMA_PORT: "8000"
+      CORS_ORIGINS: http://localhost:4200,http://127.0.0.1:4200
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-128}
+      EMBEDDING_MAX_PARALLEL: ${EMBEDDING_MAX_PARALLEL:-4}
     depends_on:
       - chromadb
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - app
 
 volumes:
   chroma_data:

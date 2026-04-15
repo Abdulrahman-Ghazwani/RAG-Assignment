@@ -23,7 +23,7 @@ class RAGPipeline:
         self.client = OpenAI(api_key=key)
         self.vector_store = None
 
-    def build_index(self, chunks: list[dict]):
+    def build_index(self, chunks: list[dict], collection_name: str | None = None):
         valid = [
             c for c in chunks
             if isinstance(c.get("content"), str) and c["content"].strip()
@@ -33,13 +33,28 @@ class RAGPipeline:
             raise ValueError("No valid chunks found to build the index.")
 
         embeddings = self.embedder.embed_texts(texts)
+        name = collection_name or CHROMA_COLLECTION
         self.vector_store = ChromaVectorStore(
             len(embeddings[0]),
             host=CHROMA_HOST,
             port=CHROMA_PORT,
-            collection_name=CHROMA_COLLECTION,
+            collection_name=name,
         )
-        self.vector_store.add(embeddings, valid)
+        self.vector_store.replace_all(embeddings, valid)
+
+    def append_chunks(self, chunks: list[dict]):
+        """Add chunks to an existing index without removing previous vectors."""
+        if self.vector_store is None:
+            raise ValueError("Vector store is not built yet. Process documents first.")
+        valid = [
+            c for c in chunks
+            if isinstance(c.get("content"), str) and c["content"].strip()
+        ]
+        texts = [c["content"].strip() for c in valid]
+        if not texts:
+            raise ValueError("No valid chunks found to append.")
+        embeddings = self.embedder.embed_texts(texts)
+        self.vector_store.append(embeddings, valid)
 
     def retrieve(self, question: str):
         if self.vector_store is None:

@@ -38,6 +38,11 @@ CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "rag_documents")
 EMBEDDING_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
 
+# Embeddings: larger batches + limited parallelism = fewer round trips (same model & quality).
+# OpenAI allows many inputs per request; tune if you hit rate limits.
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "128"))
+EMBEDDING_MAX_PARALLEL = int(os.getenv("EMBEDDING_MAX_PARALLEL", "4"))
+
 CHUNK_SIZE = 700
 CHUNK_OVERLAP = 120
 TOP_K = 4

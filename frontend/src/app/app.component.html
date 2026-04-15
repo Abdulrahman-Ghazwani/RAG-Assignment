@@ -1,0 +1,180 @@
+<div class="page">
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div class="brand-text">
+        <h1>{{ title }}</h1>
+        <p class="tagline">{{ tagline }}</p>
+      </div>
+    </div>
+    <div class="session-pill" title="Browser session id (used by the API)">
+      <span class="session-label">Session</span>
+      <code class="session-id">{{ rag.getSessionId() }}</code>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="card upload">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Corpus</h2>
+          <p class="card-desc">Up to {{ maxFiles }} PDF or DOCX files · drag and drop or browse</p>
+        </div>
+        <span class="badge" [class.badge-ok]="fileCount() > 0">{{ fileCount() }}/{{ maxFiles }}</span>
+      </div>
+
+      <div
+        class="dropzone"
+        [class.dropzone-active]="dragActive()"
+        [class.dropzone-disabled]="processing()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave($event)"
+        (drop)="onDrop($event)"
+        (click)="!processing() && openFilePicker()"
+        [attr.role]="processing() ? undefined : 'button'"
+        [attr.tabindex]="processing() ? -1 : 0"
+        (keydown.enter)="!processing() && openFilePicker()"
+        (keydown.space)="$event.preventDefault(); !processing() && openFilePicker()"
+      >
+        <input
+          #fileInput
+          type="file"
+          class="visually-hidden"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          multiple
+          [disabled]="processing()"
+          (change)="onFileInputChange($event)"
+        />
+        <div class="drop-inner">
+          <span class="drop-icon" aria-hidden="true">⇪</span>
+          <p class="drop-title">Drop files here</p>
+          <p class="drop-hint">Or click to browse · max {{ maxFiles }} files</p>
+        </div>
+      </div>
+
+      @if (selectedFiles().length) {
+        <ul class="file-list">
+          @for (f of selectedFiles(); track $index) {
+            <li class="file-chip">
+              <span class="file-name" [title]="f.name">{{ f.name }}</span>
+              <span class="file-meta">{{ (f.size / 1024) | number: '1.0-0' }} KB</span>
+              <button
+                type="button"
+                class="icon-btn"
+                [disabled]="processing()"
+                (click)="removeFile($index); $event.stopPropagation()"
+                aria-label="Remove file"
+              >
+                ×
+              </button>
+            </li>
+          }
+        </ul>
+
+        <div class="file-actions">
+          @if (!processing()) {
+            <div class="file-actions-row">
+              <button type="button" class="btn ghost" (click)="clearAllFiles()">Clear all</button>
+              <button type="button" class="btn primary" (click)="processDocuments()">Index documents</button>
+            </div>
+          } @else {
+            <div
+              class="indexing-panel"
+              role="progressbar"
+              [attr.aria-valuemin]="0"
+              [attr.aria-valuemax]="100"
+              [attr.aria-valuenow]="processPercent()"
+              [attr.aria-label]="'Indexing progress: ' + processPercent() + '%'"
+            >
+              <div class="indexing-panel-top">
+                <span class="indexing-title">Indexing</span>
+                <span class="indexing-pct">{{ processPercent() }}<span class="indexing-pct-unit">%</span></span>
+              </div>
+              <div class="indexing-bar">
+                <div class="indexing-fill" [style.width.%]="processPercent()"></div>
+              </div>
+              <p class="indexing-caption">{{ processLabel() }}</p>
+            </div>
+          }
+        </div>
+      } @else {
+        <p class="empty-hint">No files selected yet.</p>
+      }
+    </section>
+
+    @if (error()) {
+      <div class="alert error" role="alert">{{ error() }}</div>
+    }
+    @if (info() && !error()) {
+      <div class="alert info" role="status">{{ info() }}</div>
+    }
+
+    <section class="card chat">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Conversation</h2>
+          <p class="card-desc">
+            Q&amp;A is loaded from the server when you open the page (same browser session). It is cleared when you
+            <strong>re-index</strong> or when the API process restarts.
+          </p>
+        </div>
+      </div>
+
+      <div class="thread">
+        @if (history().length === 0) {
+          <div class="thread-empty">
+            <p>No messages yet. Index documents, then ask a question.</p>
+          </div>
+        }
+        @for (turn of history(); track $index) {
+          <div class="turn">
+            <div class="bubble-row user">
+              <div class="avatar user-av" aria-hidden="true">You</div>
+              <div class="bubble user-bubble">{{ turn.question }}</div>
+            </div>
+            <div class="bubble-row assistant">
+              <div class="avatar asst-av" aria-hidden="true">AI</div>
+              <div class="bubble-col">
+                <div class="bubble asst-bubble">{{ turn.answer }}</div>
+                @if (turn.sources.length) {
+                  <div class="sources">
+                    <div class="sources-title">Sources</div>
+                    <ul>
+                      @for (s of turn.sources; track s) {
+                        <li>{{ s }}</li>
+                      }
+                    </ul>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="composer">
+        <textarea
+          rows="2"
+          class="composer-input"
+          placeholder="Ask about your documents… (Ctrl+Enter to send)"
+          [ngModel]="draftQuestion()"
+          (ngModelChange)="draftQuestion.set($event)"
+          (keydown.control.enter)="sendQuestion()"
+          (keydown.meta.enter)="sendQuestion()"
+        ></textarea>
+        <button type="button" class="btn primary composer-send" (click)="sendQuestion()" [disabled]="chatting()">
+          @if (chatting()) {
+            <span class="spinner sm" aria-hidden="true"></span>
+          }
+          {{ chatting() ? 'Generating…' : 'Send' }}
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>RAG · OpenAI + Chroma · streaming answers</span>
+  </footer>
+</div>

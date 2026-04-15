@@ -1,9 +1,8 @@
 streamlit
 openai
 langchain-text-splitters
-faiss-cpu
+chromadb
 pymupdf
 tiktoken
 python-dotenv
-numpy
 python-docx

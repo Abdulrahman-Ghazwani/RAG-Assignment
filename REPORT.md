@@ -12,12 +12,12 @@ End-to-end RAG: upload documents (PDF/DOCX), ask questions in **Arabic or Englis
 | Load | **PyMuPDF** (PDF per page), **python-docx** (DOCX as one block) |
 | Chunk | **RecursiveCharacterTextSplitter** — size/overlap from `config.py` |
 | Embed | **OpenAI** `text-embedding-3-small` (batched, long texts truncated) |
-| Retrieve | **FAISS** `IndexFlatL2` in memory, **top‑K** + **min similarity** |
+| Retrieve | **ChromaDB** (HTTP client, L2 space), **top‑K** + **min similarity** |
 | Generate | **OpenAI** `gpt-4o-mini`, **temperature 0**, **stream** |
 
 ## Design (minimal)
 
-- **FAISS**: fast, no external DB for an assignment scope.
+- **ChromaDB**: runs as a **Docker** service (`docker-compose.yml`); vectors persist in a named volume.
 - **Score filter** before LLM: weak matches → fixed “no information” reply (no sources).
 - **Prompt**: answer only from context; same language as question; explicit fallback sentence.
 
@@ -29,7 +29,7 @@ End-to-end RAG: upload documents (PDF/DOCX), ask questions in **Arabic or Englis
 
 ## Limits
 
-- In-memory index only (lost on restart).  
+- Chroma data persists in Docker volume; re-processing documents replaces the collection.  
 - DOCX has no real page map (cited as page 1).  
 - Scanned PDFs need OCR outside this project.
 

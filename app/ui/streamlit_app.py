@@ -9,7 +9,7 @@ from collections import defaultdict
 
 import streamlit as st
 
-from app.config import NO_ANSWER_MESSAGE
+from app.config import NO_ANSWER_MESSAGE, load_openai_api_key
 from app.services.chunker import TextChunker
 from app.services.document_loader import DocumentLoader
 from app.services.rag_pipeline import RAGPipeline
@@ -17,6 +17,13 @@ from app.services.rag_pipeline import RAGPipeline
 st.set_page_config(page_title="Document RAG", layout="wide")
 st.title("Conversational RAG Pipeline")
 st.caption("Upload up to 3 PDF or DOCX files — ask in Arabic or English.")
+
+_key_sig = load_openai_api_key() or ""
+_prev_key = st.session_state.get("_openai_key_sig")
+if _prev_key is not None and _prev_key != _key_sig:
+    for _k in ("pipeline", "indexed", "qa_history"):
+        st.session_state.pop(_k, None)
+st.session_state._openai_key_sig = _key_sig
 
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = RAGPipeline()

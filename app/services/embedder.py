@@ -1,12 +1,12 @@
 from openai import OpenAI
 import tiktoken
 
-from app.config import EMBEDDING_MODEL, OPENAI_API_KEY
+from app.config import EMBEDDING_MODEL
 
 
 class Embedder:
-    def __init__(self):
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+    def __init__(self, api_key: str):
+        self.client = OpenAI(api_key=api_key)
         try:
             self.encoding = tiktoken.encoding_for_model(EMBEDDING_MODEL)
         except KeyError:

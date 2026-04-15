@@ -2,19 +2,25 @@ from openai import OpenAI
 
 from app.config import (
     CHAT_MODEL,
+    CHROMA_COLLECTION,
+    CHROMA_HOST,
+    CHROMA_PORT,
     MIN_RELEVANCE_SCORE,
     NO_ANSWER_MESSAGE,
-    OPENAI_API_KEY,
     TOP_K,
+    load_openai_api_key,
 )
 from app.services.embedder import Embedder
-from app.services.vector_store import FaissVectorStore
+from app.services.vector_store import ChromaVectorStore
 
 
 class RAGPipeline:
     def __init__(self):
-        self.embedder = Embedder()
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        key = load_openai_api_key()
+        if not key:
+            raise ValueError("Set OPENAI_API_KEY in .env at the project root.")
+        self.embedder = Embedder(api_key=key)
+        self.client = OpenAI(api_key=key)
         self.vector_store = None
 
     def build_index(self, chunks: list[dict]):
@@ -27,7 +33,12 @@ class RAGPipeline:
             raise ValueError("No valid chunks found to build the index.")
 
         embeddings = self.embedder.embed_texts(texts)
-        self.vector_store = FaissVectorStore(len(embeddings[0]))
+        self.vector_store = ChromaVectorStore(
+            len(embeddings[0]),
+            host=CHROMA_HOST,
+            port=CHROMA_PORT,
+            collection_name=CHROMA_COLLECTION,
+        )
         self.vector_store.add(embeddings, valid)
 
     def retrieve(self, question: str):

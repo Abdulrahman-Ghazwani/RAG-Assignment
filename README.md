@@ -11,4 +11,4 @@ Simple **RAG** demo: upload up to **3** **PDF/DOCX** files, index them, then ask
 python -m streamlit run app/ui/streamlit_app.py
 ```
 
-Requires `OPENAI_API_KEY` in `.env`.
+Requires `OPENAI_API_KEY` in `.env` and ChromaDB running (`docker compose up -d chromadb` or full `docker compose up`).

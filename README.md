@@ -1,5 +1,7 @@
 # RAG Assignment
 
+**Standalone run guide for submission:** see **[INSTRUCTIONS.md](INSTRUCTIONS.md)** (English, step-by-step).
+
 Upload up to **3** PDF or DOCX files, index them, then ask questions in **Arabic or English**. Answers **stream** from the model; when the reply is grounded in your files, **Sources** are listed.
 
 | Layer | What |

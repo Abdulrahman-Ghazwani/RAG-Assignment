@@ -17,26 +17,23 @@
 
   <main class="main">
     <section class="card upload">
-      <div class="card-head">
-        <div>
-          <h2 class="card-title">Corpus</h2>
-          <p class="card-desc">Up to {{ maxFiles }} PDF or DOCX files · drag and drop or browse</p>
-        </div>
-        <span class="badge" [class.badge-ok]="fileCount() > 0">{{ fileCount() }}/{{ maxFiles }}</span>
+      <div class="card-head card-head-corpus">
+        <h2 class="card-title">Corpus</h2>
+        <p class="card-desc">PDF or DOCX.</p>
       </div>
 
       <div
         class="dropzone"
         [class.dropzone-active]="dragActive()"
-        [class.dropzone-disabled]="processing()"
+        [class.dropzone-disabled]="processing() || removingIndexed() || clearingServer() || slotsForQueue() === 0"
         (dragover)="onDragOver($event)"
         (dragleave)="onDragLeave($event)"
         (drop)="onDrop($event)"
-        (click)="!processing() && openFilePicker()"
-        [attr.role]="processing() ? undefined : 'button'"
-        [attr.tabindex]="processing() ? -1 : 0"
-        (keydown.enter)="!processing() && openFilePicker()"
-        (keydown.space)="$event.preventDefault(); !processing() && openFilePicker()"
+        (click)="!processing() && !removingIndexed() && !clearingServer() && slotsForQueue() > 0 && openFilePicker()"
+        [attr.role]="processing() || removingIndexed() || clearingServer() || slotsForQueue() === 0 ? undefined : 'button'"
+        [attr.tabindex]="processing() || removingIndexed() || clearingServer() || slotsForQueue() === 0 ? -1 : 0"
+        (keydown.enter)="!processing() && !removingIndexed() && !clearingServer() && slotsForQueue() > 0 && openFilePicker()"
+        (keydown.space)="$event.preventDefault(); !processing() && !removingIndexed() && !clearingServer() && slotsForQueue() > 0 && openFilePicker()"
       >
         <input
           #fileInput
@@ -44,63 +41,148 @@
           class="visually-hidden"
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           multiple
-          [disabled]="processing()"
+          [disabled]="processing() || removingIndexed() || clearingServer() || slotsForQueue() === 0"
           (change)="onFileInputChange($event)"
         />
         <div class="drop-inner">
           <span class="drop-icon" aria-hidden="true">⇪</span>
           <p class="drop-title">Drop files here</p>
-          <p class="drop-hint">Or click to browse · max {{ maxFiles }} files</p>
+          <p class="drop-hint">
+            @if (slotsForQueue() === 0) {
+              Corpus full — remove a file or clear the index to add more.
+            } @else {
+              Or click to browse
+            }
+          </p>
         </div>
       </div>
 
-      @if (selectedFiles().length) {
-        <ul class="file-list">
-          @for (f of selectedFiles(); track $index) {
-            <li class="file-chip">
-              <span class="file-name" [title]="f.name">{{ f.name }}</span>
-              <span class="file-meta">{{ (f.size / 1024) | number: '1.0-0' }} KB</span>
+      @if (uploadRows().length) {
+        <div class="corpus-section">
+          <div class="corpus-section-head">
+            <h3 class="corpus-section-title">Your documents</h3>
+            @if (indexedDistinctCount() > 0) {
               <button
                 type="button"
-                class="icon-btn"
-                [disabled]="processing()"
-                (click)="removeFile($index); $event.stopPropagation()"
-                aria-label="Remove file"
+                class="btn ghost btn-compact"
+                [disabled]="processing() || removingIndexed() || clearingServer()"
+                (click)="openClearServerIndexDialog()"
               >
-                ×
+                {{ clearingServer() ? 'Clearing…' : 'Clear server index' }}
               </button>
-            </li>
-          }
-        </ul>
+            }
+          </div>
+          <ul class="file-list corpus-file-list your-documents-list">
+            @for (row of uploadRows(); track row.id) {
+              <li class="file-chip" [class.file-chip-done]="isRowIndexed(row)">
+                <span class="file-name" [title]="row.file.name">{{ row.file.name }}</span>
+                <span class="file-meta file-meta-with-badge">
+                  {{ (logicalByteSize(row) / 1024) | number: '1.0-0' }} KB
+                  @if (isRowIndexed(row)) {
+                    <span class="file-status file-status-done">Indexed</span>
+                  } @else {
+                    <span class="file-status file-status-pending">Pending</span>
+                  }
+                </span>
+                <button
+                  type="button"
+                  class="icon-btn"
+                  [disabled]="processing() || removingIndexed() || clearingServer()"
+                  (click)="removeUploadRow(row.id); $event.stopPropagation()"
+                  [attr.aria-label]="isRowIndexed(row) ? 'Remove from server index' : 'Remove from list'"
+                >
+                  ×
+                </button>
+              </li>
+            }
+          </ul>
 
-        <div class="file-actions">
           @if (!processing()) {
-            <div class="file-actions-row">
-              <button type="button" class="btn ghost" (click)="clearAllFiles()">Clear all</button>
-              <button type="button" class="btn primary" (click)="processDocuments()">Index documents</button>
+            <div class="file-actions">
+              <div class="file-actions-row">
+                <button
+                  type="button"
+                  class="btn ghost"
+                  [disabled]="pendingQueueCount() === 0"
+                  (click)="clearPendingFiles()"
+                >
+                  Clear pending
+                </button>
+                <button
+                  type="button"
+                  class="btn primary"
+                  [disabled]="pendingQueueCount() === 0"
+                  (click)="processDocuments()"
+                >
+                  Index documents
+                </button>
+              </div>
             </div>
           } @else {
             <div
-              class="indexing-panel"
+              class="indexing-panel indexing-container"
               role="progressbar"
               [attr.aria-valuemin]="0"
               [attr.aria-valuemax]="100"
               [attr.aria-valuenow]="processPercent()"
-              [attr.aria-label]="'Indexing progress: ' + processPercent() + '%'"
+              [attr.aria-label]="'Indexing: ' + processPercent() + '%'"
             >
-              <div class="indexing-panel-top">
+              <div class="indexing-row">
                 <span class="indexing-title">Indexing</span>
-                <span class="indexing-pct">{{ processPercent() }}<span class="indexing-pct-unit">%</span></span>
-              </div>
-              <div class="indexing-bar">
-                <div class="indexing-fill" [style.width.%]="processPercent()"></div>
+                <div class="indexing-bar">
+                  <div class="indexing-fill" [style.width.%]="processPercent()"></div>
+                </div>
               </div>
               <p class="indexing-caption">{{ processLabel() }}</p>
             </div>
           }
         </div>
-      } @else {
-        <p class="empty-hint">No files selected yet.</p>
+      }
+
+      @if (!uploadRows().length && indexedDistinctCount() > 0) {
+        <div class="corpus-section">
+          <div class="corpus-section-head">
+            <h3 class="corpus-section-title">In your index (server)</h3>
+            <button
+              type="button"
+              class="btn ghost btn-compact"
+              [disabled]="processing() || removingIndexed() || clearingServer()"
+              (click)="openClearServerIndexDialog()"
+            >
+              {{ clearingServer() ? 'Clearing…' : 'Clear server index' }}
+            </button>
+          </div>
+          @if (!indexedDocuments().length) {
+            <p class="empty-hint empty-hint-sub">{{ indexedDistinctCount() }} file(s) on the server.</p>
+          }
+          <ul class="file-list corpus-file-list">
+            @for (doc of indexedDocuments(); track doc.sha256 ?? doc.filename) {
+              <li class="file-chip file-chip-done">
+                <span class="file-name" [title]="doc.filename">{{ doc.filename }}</span>
+                <span class="file-meta">
+                  @if (doc.size != null) {
+                    {{ doc.size / 1024 | number: '1.0-0' }} KB
+                  } @else {
+                    indexed
+                  }
+                </span>
+                <button
+                  type="button"
+                  class="icon-btn"
+                  [disabled]="processing() || removingIndexed() || clearingServer()"
+                  (click)="removeIndexedDocument(doc); $event.stopPropagation()"
+                  aria-label="Remove from server index"
+                >
+                  ×
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (!corpusTotal()) {
+        <p class="empty-hint">No documents yet.</p>
       }
     </section>
 
@@ -115,10 +197,7 @@
       <div class="card-head">
         <div>
           <h2 class="card-title">Conversation</h2>
-          <p class="card-desc">
-            Q&amp;A is loaded from the server when you open the page (same browser session). It is cleared when you
-            <strong>re-index</strong> or when the API process restarts.
-          </p>
+          <p class="card-desc">Answers use your indexed documents. History clears when you re-index.</p>
         </div>
       </div>
 
@@ -175,6 +254,43 @@
   </main>
 
   <footer class="foot">
-    <span>RAG · OpenAI + Chroma · streaming answers</span>
+    <span>Document RAG</span>
   </footer>
+
+  @if (clearServerIndexDialogOpen()) {
+    <div
+      class="modal-backdrop"
+      role="presentation"
+      (click)="closeClearServerIndexDialog()"
+    >
+      <div
+        class="modal-dialog modal-dialog--danger"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clear-server-dialog-title"
+        aria-describedby="clear-server-dialog-desc"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="modal-dialog-head">
+          <div class="modal-icon-wrap" aria-hidden="true">
+            <svg class="modal-icon-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </div>
+          <div class="modal-dialog-copy">
+            <h2 id="clear-server-dialog-title" class="modal-dialog-title">Clear server index?</h2>
+            <p id="clear-server-dialog-desc" class="modal-dialog-text">
+              This removes all indexed documents for this session from the server. Chat history will be cleared.
+            </p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" (click)="closeClearServerIndexDialog()">Cancel</button>
+          <button type="button" class="btn danger" (click)="performClearServerIndex()">Clear index</button>
+        </div>
+      </div>
+    </div>
+  }
 </div>

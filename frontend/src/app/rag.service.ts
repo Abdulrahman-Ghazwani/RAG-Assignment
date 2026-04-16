@@ -38,6 +38,18 @@ export interface ChatHistoryTurn {
   sources: string[];
 }
 
+export interface IndexedDocument {
+  filename: string;
+  sha256: string | null;
+  size: number | null;
+}
+
+export interface CorpusResponse {
+  indexed: boolean;
+  documents: IndexedDocument[];
+  distinct_count?: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagService {
   private readonly sessionId: string;
@@ -62,6 +74,40 @@ export class RagService {
       }),
     );
     return res.turns ?? [];
+  }
+
+  async fetchCorpus(): Promise<CorpusResponse> {
+    return await firstValueFrom(
+      this.http.get<CorpusResponse>(`${API_BASE}/api/corpus`, {
+        headers: new HttpHeaders({ 'X-Session-Id': this.sessionId }),
+      }),
+    );
+  }
+
+  async removeCorpusDocument(params: { sha256?: string | null; filename: string }): Promise<{ ok: boolean; removed: string }> {
+    const body: { sha256?: string; filename: string } = { filename: params.filename };
+    if (params.sha256) {
+      body.sha256 = params.sha256;
+    }
+    return await firstValueFrom(
+      this.http.post<{ ok: boolean; removed: string }>(`${API_BASE}/api/corpus/remove`, body, {
+        headers: new HttpHeaders({
+          'X-Session-Id': this.sessionId,
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
+  }
+
+  async clearServerCorpus(): Promise<{ ok: boolean; message: string }> {
+    return await firstValueFrom(
+      this.http.post<{ ok: boolean; message: string }>(`${API_BASE}/api/corpus/clear`, {}, {
+        headers: new HttpHeaders({
+          'X-Session-Id': this.sessionId,
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
   }
 
   async processDocuments(

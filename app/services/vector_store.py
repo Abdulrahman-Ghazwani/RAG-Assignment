@@ -63,6 +63,48 @@ class ChromaVectorStore:
             metadatas=metadatas,
         )
 
+    def delete_by_source(self, source: str) -> int:
+        if self._collection is None:
+            self._ensure_collection_open()
+        if self._collection is None:
+            return 0
+        try:
+            res = self._collection.get(
+                where={"source": {"$eq": source}},
+                include=[],
+            )
+        except Exception:
+            try:
+                res = self._collection.get(where={"source": source}, include=[])
+            except Exception:
+                return 0
+        ids = res.get("ids") or []
+        if not ids:
+            return 0
+        self._collection.delete(ids=ids)
+        return len(ids)
+
+    def distinct_sources(self) -> list[str]:
+        if self._collection is None:
+            self._ensure_collection_open()
+        if self._collection is None:
+            return []
+        data = self._collection.get(include=["metadatas"])
+        metas = data.get("metadatas") or []
+        names: set[str] = set()
+        for m in metas:
+            if m and m.get("source"):
+                names.add(str(m["source"]))
+        return sorted(names, key=str.lower)
+
+    def wipe_entire_collection(self) -> None:
+        """Delete the whole Chroma collection for this session (all embeddings)."""
+        try:
+            self._client.delete_collection(self._collection_name)
+        except Exception:
+            pass
+        self._collection = None
+
     def search(self, query_embedding: list[float], top_k: int = 4):
         if self._collection is None:
             self._ensure_collection_open()

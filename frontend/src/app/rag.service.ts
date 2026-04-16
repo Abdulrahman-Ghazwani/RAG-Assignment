@@ -110,6 +110,11 @@ export class RagService {
     );
   }
 
+  /**
+   * Uploads files to `/api/process` and reports progress.
+   * The API does not stream indexing %, so we **simulate** phases: 0–45% from upload bytes,
+   * then 45–96% on a timer until the HTTP response arrives (then 100%).
+   */
   async processDocuments(
     files: File[],
     onProgress?: (p: ProcessProgress) => void,
@@ -120,6 +125,7 @@ export class RagService {
     }
     const totalBytes = Math.max(1, files.reduce((s, f) => s + f.size, 0));
 
+    // Timers only drive the fake progress bar; the real work is the single POST request.
     let indexTimer: ReturnType<typeof setInterval> | null = null;
     let indexPct = 45;
     let indexStarted = false;
@@ -153,6 +159,7 @@ export class RagService {
       }, 220);
     };
 
+    // If upload events are slow to fire, still switch to "indexing" UI after 600ms.
     fallbackTimer = setTimeout(() => {
       if (!indexStarted) {
         startIndexPhase();
@@ -172,6 +179,7 @@ export class RagService {
               const ev = event;
               const total = ev.total && ev.total > 0 ? ev.total : totalBytes;
               const loaded = ev.loaded;
+              // Map byte progress to 0–45% of the bar; remaining % reserved for "indexing" phase.
               const uploadPct = Math.min(45, Math.round((45 * loaded) / total));
               onProgress?.({ percent: uploadPct, label: 'Uploading…' });
               if (loaded >= total) {
@@ -212,6 +220,10 @@ export class RagService {
     });
   }
 
+  /**
+   * Reads the server's SSE (`text/event-stream`): JSON lines `data: {...}` with `token` chunks
+   * until `done: true` plus optional `sources`. Incomplete chunks stay in `buffer` across reads.
+   */
   async *chatStream(question: string): AsyncGenerator<ChatStreamEvent> {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
@@ -253,6 +265,7 @@ export class RagService {
       }
       buffer += decoder.decode(value, { stream: true });
 
+      // SSE events are separated by blank lines; last fragment may be incomplete.
       const parts = buffer.split('\n\n');
       buffer = parts.pop() ?? '';
 

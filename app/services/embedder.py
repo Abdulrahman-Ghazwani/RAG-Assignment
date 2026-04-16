@@ -11,6 +11,7 @@ from app.config import (
 
 
 class Embedder:
+    """Calls OpenAI embeddings: batched + parallel for chunks, single vector for user questions."""
     def __init__(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
         try:
@@ -19,6 +20,7 @@ class Embedder:
             self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def _truncate(self, text: str) -> str:
+        # Stay within a safe token budget for the embedding model input.
         ids = self.encoding.encode(text)
         if len(ids) > 8000:
             return self.encoding.decode(ids[:8000])
@@ -47,6 +49,7 @@ class Embedder:
         if len(batches) == 1:
             return self._embed_one_batch(batches[0])
 
+        # Speed up large documents: embed each batch concurrently (bounded by config).
         workers = max(1, min(EMBEDDING_MAX_PARALLEL, len(batches)))
 
         with ThreadPoolExecutor(max_workers=workers) as pool:

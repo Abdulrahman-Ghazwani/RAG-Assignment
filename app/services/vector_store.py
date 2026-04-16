@@ -1,3 +1,8 @@
+"""ChromaDB HTTP client: stores chunk embeddings and runs similarity search.
+
+Distance metric is **L2** (Euclidean) via `hnsw:space` — smaller distance = more similar.
+The `score` derived in `search()` is a simple mapping for a relevance threshold, not a formal probability.
+"""
 import uuid
 
 import chromadb
@@ -17,6 +22,7 @@ class ChromaVectorStore:
             pass
         self._collection = self._client.create_collection(
             name=self._collection_name,
+            # L2 = Euclidean distance between embedding vectors (Chroma ANN index).
             metadata={"hnsw:space": "l2"},
         )
 
@@ -32,6 +38,7 @@ class ChromaVectorStore:
             )
 
     def replace_all(self, embeddings: list[list[float]], documents: list[dict]) -> None:
+        """Wipe the collection and insert these vectors (full re-index for this Chroma collection)."""
         if not embeddings:
             raise ValueError("No embeddings to add.")
         if len(embeddings[0]) != self.dim:
@@ -48,6 +55,7 @@ class ChromaVectorStore:
         )
 
     def append(self, embeddings: list[list[float]], documents: list[dict]) -> None:
+        """Add vectors without deleting existing ones (multi-document session index)."""
         if not embeddings:
             raise ValueError("No embeddings to add.")
         if len(embeddings[0]) != self.dim:
@@ -68,6 +76,7 @@ class ChromaVectorStore:
             self._ensure_collection_open()
         if self._collection is None:
             return 0
+        # Chroma filter syntax differs across versions; try dict-style `where` first, then plain.
         try:
             res = self._collection.get(
                 where={"source": {"$eq": source}},
@@ -115,6 +124,7 @@ class ChromaVectorStore:
             n_results=top_k,
             include=["distances", "metadatas", "documents"],
         )
+        # Chroma returns one "batch" per query; we only ever send one query embedding.
         dist_batch = results.get("distances") or []
         meta_batch = results.get("metadatas") or []
         doc_batch = results.get("documents") or []
@@ -130,6 +140,7 @@ class ChromaVectorStore:
                 "page": meta.get("page"),
                 "source": meta.get("source"),
                 "distance": distance,
+                # Heuristic 0..1-ish score for MIN_RELEVANCE_SCORE filtering (not cosine similarity).
                 "score": 1.0 - (distance / 2.0),
             })
         return out

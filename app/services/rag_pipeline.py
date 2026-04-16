@@ -15,6 +15,7 @@ from app.services.vector_store import ChromaVectorStore
 
 
 class RAGPipeline:
+    """Orchestrates embedding, vector retrieval, and chat completion for one indexed corpus."""
     def __init__(self):
         key = load_openai_api_key()
         if not key:
@@ -61,6 +62,7 @@ class RAGPipeline:
             raise ValueError("Vector store is not built yet. Process documents first.")
         q_emb = self.embedder.embed_query(question)
         hits = self.vector_store.search(q_emb, top_k=TOP_K)
+        # Drop weak matches so the LLM does not see irrelevant chunks.
         return [h for h in hits if h.get("score", -1.0) >= MIN_RELEVANCE_SCORE]
 
     def build_prompt(self, question: str, retrieved_chunks: list[dict]) -> str:
@@ -76,6 +78,8 @@ class RAGPipeline:
         )
 
     def answer_stream(self, question: str):
+        """Returns (stream_or_None, chunks, has_grounding, fallback_text).
+        If nothing passes retrieval, caller streams `fallback_text` instead of the LLM."""
         retrieved_chunks = self.retrieve(question)
         if not retrieved_chunks:
             return None, [], False, NO_ANSWER_MESSAGE

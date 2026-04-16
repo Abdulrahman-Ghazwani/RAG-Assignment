@@ -239,6 +239,8 @@ async def process_documents(
     collection = _chroma_collection_name(session_id)
     existing_pipeline = state.get("pipeline")
     indexed_before = bool(state.get("indexed")) and existing_pipeline is not None
+    # Reuse the same RAGPipeline + Chroma collection when we are only adding new files;
+    # otherwise build a fresh pipeline (first index, or pipeline object missing store).
     can_append = (
         indexed_before
         and getattr(existing_pipeline, "vector_store", None) is not None
@@ -258,6 +260,7 @@ async def process_documents(
         st["pipeline"] = pipeline
         st["processed_hashes"] = processed_hashes | new_hashes
         st["chat_history"] = []
+        # Merge new file metadata with existing list keyed by sha256 (dedupe by hash).
         by_hash = {d["sha256"]: d for d in st.get("indexed_documents", [])}
         for m in indexed_meta:
             by_hash[m["sha256"]] = {
